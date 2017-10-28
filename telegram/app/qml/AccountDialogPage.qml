@@ -10,7 +10,6 @@ import Cutegram 1.0
 
 import "components"
 
-// Cutegram: AccountMessageBox.qml
 
 Page {
     id: dialog_page
@@ -19,9 +18,10 @@ Page {
     property Dialog currentDialog: telegramObject.nullDialog
 
     property bool isChat: currentDialog ? currentDialog.peer.chatId != 0 : false
+    property bool isChannel: currentDialog ? currentDialog.peer.channelId != 0 : false
     property User user: telegramObject.user(currentDialog.encrypted ? enChatUid : currentDialog.peer.userId)
-    property Chat chat: telegramObject.chat(currentDialog.peer.chatId)
-    property int dialogId: isChat ? currentDialog.peer.chatId : (currentDialog.encrypted ? enChatUid : currentDialog.peer.userId)
+    property Chat chat: telegramObject.chat(isChannel ? currentDialog.peer.channelId : currentDialog.peer.chatId)
+    property int dialogId: isChannel ? currentDialog.peer.channelId : isChat ? currentDialog.peer.chatId : (currentDialog.encrypted ? enChatUid : currentDialog.peer.userId)
 
     property EncryptedChat enchat: telegramObject.encryptedChat(currentDialog.peer.userId)
     property int enChatUid: enchat.adminId==telegramObject.me ? enchat.participantId : enchat.adminId
@@ -30,7 +30,7 @@ Page {
         Action {
             objectName: "groupInfo"
             iconName: "stock_contact"
-            text: isChat ? i18n.tr("Group Info") : i18n.tr("Profile Info")
+            text: isChannel ? i18n.tr("Channel Info") : isChat ? i18n.tr("Group Info") : i18n.tr("Profile Info")
             onTriggered: {
                 Qt.inputMethod.hide();
                 headerClicked();
@@ -54,7 +54,6 @@ Page {
             id: copySelectedAction
             iconName: "edit-copy"
             text: i18n.tr("Copy")
-            //visible: !pageIsSecret
             onTriggered: message_list.copySelected()
         },
         Action {
@@ -82,6 +81,10 @@ Page {
     objectName: "dialogPage"
 
     header: TelegramHeader {
+        StyleHints {
+            backgroundColor: currentDialog.encrypted ? Colors.secret_green : "white"
+            dividerColor: Qt.darker(backgroundColor, 1.1)
+        }
         id: dialog_page_header
         trailingActionBar.actions: message_list.inSelectionMode ? selectionActions : defaultActions
         leadingActionBar.actions: Action {
@@ -96,11 +99,10 @@ Page {
                 }
             }
         }
-
         telegram: telegramObject
         dialog: currentDialog
     }
-
+    
     signal forwardRequest(var messageIds);
     signal tagSearchRequest(string tag);
     signal dialogClosed();
@@ -129,9 +131,14 @@ Page {
     Component.onCompleted: {
         // This is needed to have the username list ready for @ completion
         // CuteGram upstream calls this implicitly because of the items in the top bar.
-        if (isChat) {
+        if (isChat)
+        {
             telegram.messagesGetFullChat(chat.id)
+        } else if (isChannel)
+        {
+            telegram.channelsGetFullChannel(chat.id)
         }
+
     }
 
     Component.onDestruction: {
@@ -161,7 +168,6 @@ Page {
             }
             currentDialog: dialog_page.currentDialog
             onAccepted: message_list.sendMessage(text, inReplyTo)
-//            onCopyRequest: message_list.copy()
         }
 
         AccountAddContactHeader {
@@ -188,7 +194,7 @@ Page {
             telegramObject: dialog_page.telegramObject
             currentDialog: dialog_page.currentDialog
 
-            //onFocusRequest: send_msg.setFocus()
+            onFocusRequest: send_msg.focusOut();
             onForwardRequest: {
                 dialog_page.forwardRequest(messageIds);
                 pageStack.removePages(dialog_page);

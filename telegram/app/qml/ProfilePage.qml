@@ -15,17 +15,15 @@ import "js/time.js" as Time
 import "js/colors.js" as Colors
 
 Page {
-    id: profile_page
-    title: isChat ? i18n.tr("Group Info") : i18n.tr("Contact Info")
-    objectName: "profilePage"
 
     property Telegram telegram
     property Dialog dialog
 
     property bool isChat: dialog.peer.chatId != 0
+    property bool isChannel: dialog.peer.channelId != 0
     property User user: telegram.user(dialog.encrypted ? enChatUid : dialog.peer.userId)
-    property Chat chat: telegram.chat(dialog.peer.chatId)
-    property variant dialogId: isChat ? dialog.peer.chatId : (dialog.encrypted ? enChatUid : dialog.peer.userId)
+    property Chat chat: telegram.chat(isChannel ? dialog.peer.channelId : dialog.peer.chatId)
+    property variant dialogId: isChannel ? dialog.peer.channelId : isChat ? dialog.peer.chatId : (dialog.encrypted ? enChatUid : dialog.peer.userId)
 
     property EncryptedChat enchat: telegram.encryptedChat(dialog.peer.userId)
     property int enChatUid: enchat.adminId==telegram.me ? enchat.participantId : enchat.adminId
@@ -57,9 +55,13 @@ Page {
         }
     ]
 
+    id: profile_page
+    objectName: "profilePage"
+    title: isChannel ? i18n.tr("Channel Info") : isChat ? i18n.tr("Group Info") : i18n.tr("Contact Info")
+
     header: PageHeader {
         title: profile_page.title
-        trailingActionBar.actions: isChat ? groupActions : noActions
+        trailingActionBar.actions: isChat || isChannel ? groupActions : noActions
         leadingActionBar.actions: Action {
             id: back_action
             objectName: "profileBack"
@@ -72,6 +74,14 @@ Page {
 
     onIsChatChanged: {
         if (isChat) {
+            online_count_refresher.restart()
+        } else {
+            online_count_refresher.stop()
+        }
+    }
+
+    onIsChannelChanged: {
+        if (isChannel) {
             online_count_refresher.restart()
         } else {
             online_count_refresher.stop()
@@ -94,6 +104,8 @@ Page {
         notify_check.silentChecked = !telegram.userData.isMuted(dialogId);
         if (isChat) {
             telegram.messagesGetFullChat(chat.id)
+        } else if (isChannel){
+            telegram.channelsGetFullChannel(chat.id)
         } else {
             telegram.usersGetFullUser(user.id)
         }
@@ -171,7 +183,7 @@ Page {
                  placeholderText: i18n.tr("New group chat title")
                  inputMethodHints: Qt.ImhNoPredictiveText
                  validator: RegExpValidator {
-                     regExp: /w/
+                     regExp: /[\w\s]+/
                  }
              }
 
@@ -272,7 +284,7 @@ Page {
         title.text: {
             if (!dialog) return "";
 
-            if (isChat)
+            if (isChat || isChannel)
                 return chat ? chat.title : "" // emojis.textToEmojiText(chat ? chat.title : "", 18, true);
             else
                 return user ? user.firstName + " " + user.lastName : ""//emojis.textToEmojiText(user ? user.firstName + " " + user.lastName : "", 18, true);
@@ -284,7 +296,7 @@ Page {
             var result = ""
             var list = dialog.typingUsers
             if (list.length == 0) {
-                if( isChat ) {
+                if( isChat || isChannel ) {
                     if (onlineCount > 0) {
                         // TRANSLATORS: %1 is how many members the group chat has, %2 is how many are online.
                         return i18n.tr("%1 members, %2 online").arg(chat.participantsCount).arg(onlineCount)
@@ -348,7 +360,7 @@ Page {
             left: parent.left
             right: parent.right
         }
-        visible: !isChat
+        visible: !isChat && !isChannel
         height: visible ? implicitHeight : 0
 
         ListItem.Empty {
@@ -359,6 +371,7 @@ Page {
                 right: parent.right
             }
             showDivider: false
+            highlightWhenPressed: (user && user.phone) ? true : false
 
             AbstractButton {
                 id: call_button
@@ -374,7 +387,7 @@ Page {
                     width: units.gu(3)
                     height: width
                     anchors.centerIn: parent
-                    source: Qt.resolvedUrl("qrc:/qml/files/phone_grey.png")
+                    name: "add-to-call"
                 }
                 onClicked: event.accepted = false
             }
@@ -397,7 +410,6 @@ Page {
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignLeft
                     fontSize: "large"
-                    font.family: "Helvetica"
                     color: Colors.black
                     // TRANSLATORS: Indicates unknown (not provided) phone number of a user in the profile.
                     text: user.phone ? "+" + user.phone : i18n.tr("Unknown")
@@ -407,7 +419,6 @@ Page {
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignLeft
                     fontSize: "small"
-                    font.family: "Helvetica"
                     color: Colors.grey
                     // TRANSLATORS: The subtitle for the user's phone field in user profile.
                     text: i18n.tr("Mobile")
@@ -415,7 +426,8 @@ Page {
             }
 
             onClicked: {
-                Qt.openUrlExternally("tel:///+" + (user ? user.phone : ""))
+                if (user && user.phone)
+                    Qt.openUrlExternally("tel:///+" + user.phone)
             }
         }
 
@@ -458,7 +470,6 @@ Page {
                     objectName: "profileUserName"
                     id: username_label
                     fontSize: "large"
-                    font.family: "Helvetica"
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignLeft
                     color: Colors.black
@@ -470,7 +481,6 @@ Page {
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignLeft
                     fontSize: "small"
-                    font.family: "Helvetica"
                     color: Colors.grey
                     // TRANSLATORS: The subtitle for the user's username field in user profile.
                     text: "Username"
@@ -525,7 +535,7 @@ Page {
                 width: units.gu(3)
                 height: width
                 anchors.centerIn: parent
-                source: Qt.resolvedUrl("qrc:/qml/files/profile_list.png")
+                name: "notification"
             }
         }
 
@@ -543,7 +553,6 @@ Page {
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignLeft
             fontSize: "large"
-            font.family: "Helvetica"
             color: Colors.black
             // TRANSLATORS: Text of the notifications switch label in user profile page.
             text: i18n.tr("Notifications")
@@ -589,7 +598,7 @@ Page {
             right: parent.right
         }
         showDivider: false
-        visible: !isChat
+        visible: !isChat && !isChannel
 
         onClicked: {
             block_check.checked = !block_check.checked;
@@ -620,7 +629,6 @@ Page {
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignLeft
             fontSize: "large"
-            font.family: "Helvetica"
             color: Colors.black
             // TRANSLATORS: Text of the block user switch label in user profile page.
             text: i18n.tr("Block user")
@@ -724,7 +732,7 @@ Page {
         id: online_count_refresher
         interval: 2000
         repeat: true
-        triggeredOnStart: isChat
+        triggeredOnStart: isChat || isChannel
         onTriggered: {
             onlineCount = 0
             var chatFull = telegram.chatFull(chat.id)

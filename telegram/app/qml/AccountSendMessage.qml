@@ -22,9 +22,20 @@ Rectangle {
 
     property Dialog currentDialog
     property bool isChat: currentDialog != telegramObject.nullDialog ? currentDialog.peer.chatId != 0 : false
+    property bool isChannel: currentDialog != telegramObject.nullDialog ? currentDialog.peer.channelId != 0 : false
 
     signal accepted( string text, int inReplyTo )
     signal copyRequest()
+
+    function focusOut() {
+        Qt.inputMethod.hide();
+        txt.focus = false;
+        if (privates.emojiItem)
+            privates.emojiItem.destroy();
+        if (privates.attachmentItem &&
+            privates.attachmentItem.isShown)
+            privates.attachmentItem.isShown = false;
+    }
 
     function checkForSharedContent() {
         if (transfer_helper.hasContent) {
@@ -32,7 +43,7 @@ Rectangle {
             var isFile = url.indexOf("file://") == 0
 
             if (isFile) {
-                var peerId = isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
+                var peerId = isChannel ? currentDialog.peer.channelId : isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
                 var i = 0
                 var paths = []
                 for ( ; i < transfer_helper.count; i++) {
@@ -69,6 +80,7 @@ Rectangle {
         // For some reason, smsg.isChat binding is failing. This is required to make
         // sharing from gallery with group chats work..
         isChat = currentDialog != telegramObject.nullDialog ? currentDialog.peer.chatId != 0 : false
+        isChannel = currentDialog != telegramObject.nullDialog ? currentDialog.peer.channelId != 0 : false
 
         checkForSharedContent()
     }
@@ -107,7 +119,7 @@ Rectangle {
         onTriggered: finishTyping()
 
         function finishTyping() {
-            var peerId = isChat? currentDialog.peer.chatId : currentDialog.peer.userId
+            var peerId = isChannel? currentDialog.peer.channelId : isChat? currentDialog.peer.chatId : currentDialog.peer.userId
             if(peerId != 0)
                 telegramObject.messagesSetTyping(peerId, false)
             typing_update_timer.stop()
@@ -119,7 +131,7 @@ Rectangle {
         interval: 3000
         triggeredOnStart: true
         onTriggered: {
-            var peerId = isChat? currentDialog.peer.chatId : currentDialog.peer.userId
+            var peerId = isChannel? currentDialog.peer.channelId : isChat? currentDialog.peer.chatId : currentDialog.peer.userId
             if(peerId != 0)
                 telegramObject.messagesSetTyping(peerId, true)
         }
@@ -161,7 +173,7 @@ Rectangle {
 
         anchors {
             left: privates.recording ? anchorPoint.right: parent.left
-            right: sticker_button_box.left
+            right: focus && (text.length > 0 || txt.inputMethodComposing) ? send_button_box.left : sticker_button_box.left
             bottom: parent.bottom
             margins: units.gu(1)
             rightMargin: 0
@@ -262,7 +274,7 @@ Rectangle {
         id: mediaImporter
 
         onMediaReceived: {
-            var peerId = isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
+            var peerId = isChannel? currentDialog.peer.channelId : isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
             if (contentType === ContentType.Pictures ||
                 contentType === ContentType.Videos) {
                 send_files_timer.send(peerId, urls, false, false)
@@ -283,16 +295,19 @@ Rectangle {
 
         opacity: privates.buttonsOpacity
         Behavior on opacity { UbuntuNumberAnimation {} }
-        visible: opacity > 0 && !messagePlaceholder.visible
+        visible: opacity > 0 && !messagePlaceholder.visible && (!txt.focus || (txt.text.length == 0 && !txt.inputMethodComposing))
 
         AbstractButton {
             anchors.fill: parent
             activeFocusOnPress: false
             onClicked: {
+
+                // To work on desktop change the following line to:
+                // if (!telegramObject.connected) return
                 if (!telegramObject.connected || !Connectivity.online) return
 
                 if (!privates.emojiItem) {
-                    txt.focus = false;
+                    smsg.focusOut();
                     privates.emojiItem = emoticons_component.createObject(send_msg)
                     privates.emojiItem.y = -privates.emojiItem.height
                 } else {
@@ -304,11 +319,11 @@ Rectangle {
         Image {
             id: sticker_image
             anchors.centerIn: parent
-            height: units.dp(22)
+            height: units.gu(2.5)
             width: height
             sourceSize: Qt.size(width, height)
             fillMode: Image.PreserveAspectFit
-            source: Qt.resolvedUrl("qrc:/qml/files/emojis.svg")
+            source: Qt.resolvedUrl("qrc:/qml/files/msg_panel_stickers.svg")
             visible: !messagePlaceholder.visible
         }
     }
@@ -324,30 +339,33 @@ Rectangle {
 
         opacity: privates.buttonsOpacity
         Behavior on opacity { UbuntuNumberAnimation {} }
-        visible: opacity > 0 && !messagePlaceholder.visible
+        visible: opacity > 0 && !messagePlaceholder.visible && (!txt.focus || (txt.text.length == 0 && !txt.inputMethodComposing))
 
         AbstractButton {
             anchors.fill: parent
             activeFocusOnPress: false
             onClicked: {
+
+                // To work on desktop change the following line to:
+                // if (!telegramObject.connected) return
                 if (!telegramObject.connected || !Connectivity.online) return
 
                 Haptics.play()
                 if (!privates.attachmentItem) {
-                    privates.attachmentItem = attach_panel_component.createObject(smsg)
+                    var txtWasFocused = txt.focus;
+                    smsg.focusOut();
+                    privates.attachmentItem = attach_panel_component.createObject(smsg, { isShown: txtWasFocused })
                 }
                 privates.attachmentItem.isShown = true;
             }
         }
 
-        Image {
+        Icon {
             id: attach_image
             anchors.centerIn: parent
             height: units.dp(22)
             width: height
-            sourceSize: Qt.size(width, height)
-            fillMode: Image.PreserveAspectFit
-            source: Qt.resolvedUrl("qrc:/qml/files/attach.png")
+            name: "attachment"
             visible: !messagePlaceholder.visible
         }
     }
@@ -361,6 +379,9 @@ Rectangle {
         }
         width: send_mouse_area.width
         visible: !messagePlaceholder.visible
+
+        // To work on desktop change the following line to:
+        // enabled: True
         enabled: Connectivity.online && telegramObject.connected
 
         MouseArea {
@@ -376,7 +397,8 @@ Rectangle {
                     when: txt.inputMethodComposing || txt.text.length > 0 || privates.audioRecorded
                     PropertyChanges {
                         target: send_image
-                        source: Qt.resolvedUrl(send_mouse_area.enabled ? "qrc:/qml/files/send.png" : "qrc:/qml/files/send_disabled.png")
+                        name: "send"
+                        color: send_mouse_area.enabled ? UC.UbuntuColors.blue : UC.UbuntuColors.silk
                     }
                 },
                 State {
@@ -384,7 +406,7 @@ Rectangle {
                     when: !txt.inputMethodComposing && txt.text.length == 0 && !privates.audioRecorded
                     PropertyChanges {
                         target: send_image
-                        source: Qt.resolvedUrl("image://theme/audio-input-microphone-symbolic")
+                        name: "audio-input-microphone-symbolic"
                     }
                 }
             ]
@@ -401,7 +423,7 @@ Rectangle {
                     smsg.send()
                 }
                 else if (state == "send" && privates.audioRecorded && audioPlaybackBar.visible) {
-                    var peerId = isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
+                    var peerId = isChannel? currentDialog.peer.channelId : isChat ? currentDialog.peer.chatId : currentDialog.peer.userId
                     var urls = []
                     urls.push(privates.audioItem)
                     console.log("sending audio attachment")
@@ -417,14 +439,12 @@ Rectangle {
                 }
             }
 
-            CrossFadeImage {
+            Icon {
                 id: send_image
                 anchors.centerIn: parent
                 height: units.dp(22)
                 width: height
-                fillMode: Image.PreserveAspectFit
-                fadeStyle: "cross"
-                source: Qt.resolvedUrl("image://theme/audio-input-microphone-symbolic")
+                name: "audio-input-microphone-symbolic"
             }
 
             onPressed: {
@@ -462,16 +482,9 @@ Rectangle {
     }
 
     function send() {
-//        if( currentDialog == telegramObject.nullDialog )
-//            return
         var msg = txt.text.trim()
         if( msg == "" )
             return
-
-//        if(Cutegram.autoEmojis)
-//            msg = emojis.convertSmiliesToEmoji(msg)
-//        if(privates.suggestionItem)
-//            privates.suggestionItem.destroy()
 
         smsg.accepted(msg, messageReply.replyMessage? messageReply.replyMessage.id : 0)
         messageReply.discard()
@@ -483,7 +496,6 @@ Rectangle {
     }
 
     function requestMedia(mediaType) {
-        Qt.inputMethod.hide();
         mediaImporter.contentType = mediaType;
         mediaImporter.requestMedia();
     }
@@ -619,6 +631,8 @@ Rectangle {
                 var dId = currentDialog.peer.userId
                 if(!dId)
                     dId = currentDialog.peer.chatId
+                if(!dId)
+                    dId = currentDialog.peer.channelId
 
                 sticker_file_manager.sendSticker(dId, path)
                 emoticons.destroy();
@@ -627,6 +641,8 @@ Rectangle {
                 var dId = currentDialog.peer.userId
                 if(!dId)
                     dId = currentDialog.peer.chatId
+                if(!dId)
+                    dId = currentDialog.peer.channelId
 
                 telegramObject.forwardDocument(dId, document)
                 emoticons.destroy();
@@ -745,7 +761,7 @@ Rectangle {
         onResourceErrorChanged: {
             if (resourceError) {
                 PopupUtils.open(Qt.resolvedUrl("qrc:/qml/ui/dialogs/ConfirmationDialog.qml"),
-                    send_button_box, {
+                    null, {
                         text: i18n.tr("Please grant microphone access on System Settings > Security & Privacy."),
                         onAccept: function() {
                             Qt.openUrlExternally("settings:///system/security-privacy")

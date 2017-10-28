@@ -1,7 +1,6 @@
 import QtQuick 2.4
 import Ubuntu.Components 1.3
-import Ubuntu.Components.Popups 1.0
-//import AsemanTools.Controls 1.0
+import Ubuntu.Components.Popups 1.3
 
 import AsemanTools 1.0
 import TelegramQML 1.0
@@ -20,12 +19,13 @@ ListItem {
 
     property var dialogPage
     property Dialog dialog
-    property int dialogId: isChat ? dialog.peer.chatId : dialog.peer.userId
+    property int dialogId: isChannel ? dialog.peer.channelId : isChat ? dialog.peer.chatId : dialog.peer.userId
     property bool isChat: dialog.peer.chatId !== 0
+    property bool isChannel: dialog.peer.channelId !== 0
     property bool isMuted: telegram.userData.isMuted(dialogId)
     property bool isEncrypted: dialog.encrypted
     property User user: telegram.user(dialog.encrypted ? encryptedChatUid : dialog.peer.userId)
-    property Chat chat: telegram.chat(dialog.peer.chatId)
+    property Chat chat: telegram.chat(isChannel ? dialog.peer.channelId : dialog.peer.chatId)
 
     property EncryptedChat encryptedChat: telegramObject.encryptedChat(dialog.peer.userId)
     property int encryptedChatUid: encryptedChat.adminId === telegram.me
@@ -37,9 +37,9 @@ ListItem {
     property bool isAudioMessage: file_handler.targetType == FileHandler.TypeTargetMediaAudio
     property alias isSticker: file_handler.isSticker
 
-    property bool online: isChat ? false : (user.status.classType == image.typeUserStatusOnline)
+    property bool online: isChat || isChannel ? false : (user.status.classType == image.typeUserStatusOnline)
 
-    property string title: isChat ? chat.title : user.firstName + " " + user.lastName
+    property string title: isChat || isChannel ? chat.title : user.firstName + " " + user.lastName
 
     // in delegate -- selected: currentDialog == dialog
     property bool selected: false
@@ -70,7 +70,7 @@ ListItem {
 
                 onTriggered: {
                     PopupUtils.open(Qt.resolvedUrl("qrc:/qml/ui/dialogs/ConfirmationDialog.qml"),
-                        list_item, {
+                        null, {
                             text: i18n.tr("Are you sure you want to leave this chat?"),
                             onAccept: function() {
                                 pageStack.clear()
@@ -87,7 +87,7 @@ ListItem {
 
                 onTriggered: {
                     PopupUtils.open(Qt.resolvedUrl("qrc:/qml/ui/dialogs/ConfirmationDialog.qml"),
-                        list_item, {
+                        null, {
                             text: i18n.tr("Are you sure you want to clear history?"),
                             onAccept: function() {
                                 telegram.messagesDeleteHistory(dialogId, false)
@@ -114,6 +114,15 @@ ListItem {
         ]
     }
 
+    Rectangle {
+        anchors {
+            fill: parent;
+            margins: units.dp(4)
+        }
+        color: Colors.secret_green
+        visible: dialog.encrypted
+    }
+
     Avatar {
         id: image
         anchors {
@@ -131,34 +140,6 @@ ListItem {
         dialog: list_item.dialog
     }
 
-    Image {
-        anchors {
-            bottom: image.bottom
-            bottomMargin: -height
-            right: image.right
-            rightMargin: -width
-        }
-        source: "qrc:/qml/files/online.png"
-        sourceSize: Qt.size(width, height)
-        width: height
-        height: units.gu(2)
-        visible: online
-    }
-
-    Image {
-        anchors {
-            left: image.right
-            leftMargin: -width
-            top: image.top
-            topMargin: units.dp(2)
-        }
-        width: units.gu(1.4)
-        height: units.gu(2)
-        source: "qrc:/qml/files/lock.png"
-        sourceSize: Qt.size(width, height)
-        visible: dialog.encrypted
-    }
-
     Row {
         anchors {
             top: parent.top
@@ -171,9 +152,9 @@ ListItem {
         spacing: units.dp(4)
 
         Icon {
-            id: contact_group_icon
-            visible: isChat
-            name: "contact-group"
+            id: secret_chat_icon
+            visible: dialog.encrypted
+            name: "network-secure"
             anchors {
                 top: parent.top
                 bottom: parent.bottom
@@ -183,17 +164,17 @@ ListItem {
             width: height
         }
 
-        Text {
-            id: title_text
-            horizontalAlignment: Text.AlignLeft
-            verticalAlignment: Text.AlignVCenter
-            clip: true
-            elide: Text.ElideRight
-            wrapMode: Text.WrapAnywhere
-            maximumLineCount: 1
-            font.weight: Font.DemiBold
-            font.pixelSize: units.dp(17)//FontUtils.sizeToPixels("large")
-            text: list_item.title
+        Icon {
+            id: contact_group_icon
+            visible: isChat || isChannel
+            name: "contact-group"
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                topMargin: units.dp(4)
+                bottomMargin: units.dp(4)
+            }
+            width: height
         }
 
         Icon {
@@ -208,6 +189,19 @@ ListItem {
             }
             width: height
         }
+
+        Text {
+            id: title_text
+            horizontalAlignment: Text.AlignLeft
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: 1
+            font.weight: Font.DemiBold
+            font.pixelSize: units.dp(17)
+            text: list_item.title
+            width: parent.width - (secret_chat_icon.visible? secret_chat_icon.width : 0.0) - (contact_group_icon.visible? contact_group_icon.width : 0.0) - (audio_volume_muted_icon.visible? audio_volume_muted_icon.width : 0.0)
+        }
     }
 
     Row {
@@ -216,21 +210,21 @@ ListItem {
             bottom: parent.bottom
             left: image.right
             leftMargin: units.dp(8)
-            right: unread_rect.left
+            right: parent.right
             margins: units.dp(4)
             topMargin: 0
         }
 
         Text {
             id: message_author
-            visible: showMessage && message && (message.out || isChat) && dialog.typingUsers.length === 0 && (message.message != "" || message.action.classType == typeMessageActionChatSentImage)
+            visible: showMessage && message && (message.out || isChat || isChannel) && dialog.typingUsers.length === 0 && (message.message != "" || message.action.classType == typeMessageActionChatSentImage)
             maximumLineCount: 1
             font.pixelSize: units.dp(15)//FontUtils.sizeToPixels("smaller")
             color: Colors.telegram_blue
             text: {
                 if (!message || dialog.typingUsers.length > 0) return '';
                 if (message.out) return i18n.tr("You: ");
-                if (isChat) return telegramObject.user(message.fromId).firstName + ': ';
+                if (isChat || isChannel) return telegramObject.user(message.fromId).firstName + ': ';
                 return '';
             }
         }
@@ -238,13 +232,12 @@ ListItem {
         Text {
             id: message_text
             visible: showMessage
-            clip: true
             elide: Text.ElideRight
             wrapMode: Text.WrapAnywhere
             maximumLineCount: 1
-            font.pixelSize: units.dp(15)//FontUtils.sizeToPixels("smaller")
+            font.pixelSize: units.dp(15)
             color: Colors.grey
-            width: parent.width - message_author.width - (unread_rect.visible ? unread_rect.width : 0)
+            width: parent.width - (message_author.visible? message_author.width : 0.0) - (unread_rect.visible ? unread_rect.width : 0.0)
             text: {
                 if (!visible) return "";
 
@@ -388,7 +381,7 @@ ListItem {
             font.weight: Font.DemiBold
             font.pixelSize: FontUtils.sizeToPixels("small")
             color: "white"
-            text: dialog.unreadCount < 300 ? dialog.unreadCount : ":D"; // no-i18n
+            text: dialog.unreadCount < 999 ? dialog.unreadCount : ":D"; // no-i18n
         }
     }
 

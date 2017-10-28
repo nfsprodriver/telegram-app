@@ -1,5 +1,6 @@
 import QtQuick 2.4
 import Ubuntu.Components 1.3
+import Ubuntu.Connectivity 1.0
 
 import "qrc:/qml/js/avatar.js" as Avatar
 import "qrc:/qml/js/time.js" as Time
@@ -14,19 +15,20 @@ PageHeader {
     property Dialog dialog
 
     property bool isChat: dialog ? dialog.peer.chatId != 0 : false
+    property bool isChannel: dialog ? dialog.peer.channelId != 0 : false
     property User user: telegram.user(dialog.encrypted ? enChatUid : dialog.peer.userId)
-    property Chat chat: telegram.chat(dialog.peer.chatId)
-    property int dialogId: isChat ? dialog.peer.chatId : (dialog.encrypted ? enChatUid : dialog.peer.userId)
+    property Chat chat: telegram.chat(isChannel ? dialog.peer.channelId : dialog.peer.chatId)
+    property int dialogId: isChannel ? dialog.peer.channelId : isChat ? dialog.peer.chatId : (dialog.encrypted ? enChatUid : dialog.peer.userId)
 
     property EncryptedChat enchat: telegram.encryptedChat(dialog.peer.userId)
     property int enChatUid: enchat.adminId==telegram.me ? enchat.participantId : enchat.adminId
 
-    property bool isOnline: !isChat && user.status.classType == userStatusType.typeUserStatusOnline
+    property bool isOnline: !isChat && !isChannel && user.status.classType == userStatusType.typeUserStatusOnline
     property bool isSecretChat: dialog.encrypted
     property bool isConnecting: !telegram.connected
     property int onlineCount: {
         var result = 0;
-        if (isChat) {
+        if (isChat || isChannel) {
             var chatFull = telegram.chatFull(chat.id);
             var participants = chatFull.participants.participants;
             for(var i=0; i<participants.count; i++) {
@@ -42,7 +44,7 @@ PageHeader {
     flickable: null
 
     property string title: {
-        if (isChat) {
+        if (isChat || isChannel) {
             return chat.title;
         } else {
             return user.firstName + " " + user.lastName;
@@ -53,7 +55,7 @@ PageHeader {
         var result = "";
         var list = dialog.typingUsers;
         if (list.length > 0) {
-            if (isChat) {
+            if (isChat || isChannel) {
                 for (var i = 0; i < list.length; i++) {
                     var userId = list[i];
                     var tmpUser = telegram.user(userId);
@@ -72,7 +74,7 @@ PageHeader {
                 return i18n.tr("typing...");
             }
         } else {
-            if (isChat) {
+            if (isChat || isChannel) {
                 if (onlineCount > 0) {
                     // TRANSLATORS: %1 is group chat member count, %2 is online member count.
                     result += i18n.tr("%1 members, %2 online").arg(chat.participantsCount).arg(onlineCount)
@@ -110,77 +112,70 @@ PageHeader {
     signal clicked()
 
     contents: Item {
-        anchors {
-            top: parent.top
-            left: parent.left
-            right: parent.right
-            rightMargin: units.gu(5)
-            bottom: parent.bottom
-        }
+        anchors.fill: parent
 
         Avatar {
             id: headerImage
             width: height
             anchors {
+                top: parent.top
+                topMargin: units.dp(3)
                 left: parent.left
-                verticalCenter: parent.verticalCenter
+                bottom: parent.bottom
+                bottomMargin: units.dp(3)
+                rightMargin: units.gu(1)
             }
-
             telegram: header.telegram
             dialog: header.dialog
+        }
 
-            RotationAnimation {
-                id: connectingAnimation
-                target: headerImage
-                direction: RotationAnimation.Clockwise
-                from: 0
-                to: 359
+        Rectangle {
+            id: connectingIndicator
+            anchors.fill: headerImage
+            visible: isConnecting || !Connectivity.online
+            color: "white"
+            Icon {
+                name: isConnecting? "sync-updating" : "sync-paused"
+                anchors.fill: parent
+                opacity: parent
+            }
+            SequentialAnimation {
+                running: visible
                 loops: Animation.Infinite
-                duration: 5000
-                alwaysRunToEnd: false
-                running: isConnecting && headerImage.isLogo
-                properties: "rotation"
-
-                onRunningChanged: {
-                    if (!running) {
-                        connectingAnimation.stop();
-                        headerImage.rotation = 0;
-                    }
-                }
+                PropertyAnimation { target: connectingIndicator; property: "opacity"; to: 1; duration: 500 }
+                PropertyAnimation { target: connectingIndicator; property: "opacity"; to: 0.0; duration: 1000 }
             }
         }
 
-        //'Lock' image that is overlayed ontop of the Avatar conponent
-        Image {
-            id: secretChatImage
-            anchors {
-                left: headerImage.right
-                leftMargin: -width-5
-                top: headerImage.top
-                topMargin: units.dp(2)
-            }
-            width: units.gu(1)
-            height: units.gu(1.5)
-            source: "qrc:/qml/files/lock.png"
-            sourceSize: Qt.size(width, height)
+        Icon {
+            id: secret_chat_icon
             visible: header.isSecretChat
+            name: "network-secure"
+            anchors {
+                top: parent.top
+                left: headerImage.right
+                topMargin: units.dp(5)
+                bottomMargin: units.dp(5)
+                bottom: titleText.bottom
+            }
+            width: height
         }
 
         Label {
             id: titleText
             anchors {
                 top: parent.top
-                left: headerImage.right
+                left: secret_chat_icon.visible? secret_chat_icon.right : headerImage.right
                 leftMargin: units.gu(1)
+                right: parent.right
             }
             verticalAlignment: Text.AlignVCenter
-            width: parent.width
 
             font.pixelSize: FontUtils.sizeToPixels("large")
             elide: Text.ElideRight
-            wrapMode: Text.WordWrap
+            wrapMode: Text.WrapAnywhere
             maximumLineCount: 1
-            text: isConnecting ? i18n.tr("Connecting...") : header.title.length === 0 ? i18n.tr("Telegram") : header.title
+            text: header.title.length === 0 ? i18n.tr("Telegram") : header.title
 
             state: header.subtitle.length > 0 ? "subtitle" : "default"
             states: [

@@ -11,7 +11,6 @@
 
 #include "asemantools/asemanapplication.h"
 #include "telegram.h"
-#include "compabilitytools.h"
 #include "i18n.h"
 #include "telegramqmlinitializer.h"
 
@@ -28,10 +27,10 @@ int main(int argc, char *argv[])
     AsemanApplication app(argc, argv);
     app.setApplicationName("Telegram");
     app.setApplicationDisplayName("Telegram");
-    app.setApplicationVersion("2.4.39.5");
+    app.setApplicationVersion("2.4.42.0");
     app.setOrganizationDomain("com.ubuntu.telegram");
     app.setOrganizationName("com.ubuntu.telegram");
-//    app.setWindowIcon(QIcon(":/qml/Cutegram/files/icon.png"));
+    app.setWindowIcon(QIcon(":/qml/icons/telegram.png"));
     app.setQuitOnLastWindowClosed(false);
 
     QDir appPath = QDir(QCoreApplication::applicationDirPath());
@@ -97,9 +96,6 @@ int main(int argc, char *argv[])
         return 0;
     }
 #endif
-
-    CompabilityTools::version1();
-    CompabilityTools::version2();
 
     Cutegram cutegram;
     if (parser.isSet(dcIdOption))

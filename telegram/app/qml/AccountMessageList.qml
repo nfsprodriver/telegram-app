@@ -38,6 +38,7 @@ Rectangle {
     property alias maxId: messages_model.maxId
 
     property bool isChat: currentDialog ? currentDialog.peer.chatId != 0 : false
+    property bool isChannel: currentDialog ? currentDialog.peer.channelId != 0 : false
 
     property EncryptedChat enchat: telegramObject.encryptedChat(currentDialog.peer.userId)
     property int enChatUid: enchat.adminId==telegramObject.me? enchat.participantId : enchat.adminId
@@ -96,7 +97,7 @@ Rectangle {
             if(document != doc)
                 return
 
-            PopupUtils.open(Qt.resolvedUrl("InstallStickerDialog.qml"), acc_msg_list, {telegram: telegramObject, stickerSet: set.shortName})
+            PopupUtils.open(Qt.resolvedUrl("InstallStickerDialog.qml"), null, {telegram: telegramObject, stickerSet: set.shortName})
         }
         property Document doc
     }
@@ -110,7 +111,7 @@ Rectangle {
             messages_model.refresh()
         }
         Component.onCompleted: {
-            if (!isChat) {
+            if (!isChat && !isChannel) {
                 start()
             }
         }
@@ -194,14 +195,6 @@ Rectangle {
         onAtYBeginningChanged: if( atYBeginning && contentHeight>height &&
                                    currentDialog != telegramObject.nullDialog ) messages_model.loadMore()
 
-        // These transitions don't work very well when an item content takes too much time to load.
-        /*displaced: Transition {
-            NumberAnimation { easing.type: Easing.OutCubic; properties: "y"; duration: 300 }
-        }
-        add: Transition {
-            NumberAnimation { easing.type: Easing.OutCubic; properties: "y"; duration: add_anim_disabler.running? 0 : 300 }
-        }*/
-
         section.property: "unreaded"
         section.criteria: ViewSection.FullString
         section.delegate: Item {
@@ -235,7 +228,7 @@ Rectangle {
             maximumMediaWidth: acc_msg_list.maximumMediaWidth
             message: item
             width: mlist.width
-            visibleNames: isChat
+            visibleNames: isChat || isChannel
             opacity: filterId == user.id || filterId == -1 ? 1 : 0.1
 
             leadingActions: ListItemActions {
@@ -504,11 +497,6 @@ Rectangle {
                 rejectSecretRequest()
             }
         }
-    }
-
-    // Could use wrapping in a Loader { active: currentDialog.encrypted }
-    SecretChatEdges {
-        visible: currentDialog.encrypted
     }
 
     Timer {

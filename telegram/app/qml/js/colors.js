@@ -11,15 +11,15 @@ var intro_background= "#ffffff"
 
 var unread_green    = "#5ec245"
 var dark_green      = "#267932"
-var secret_green    = "#00a80e"
+var secret_green    = "#3eb34f"
 
 var list_pressed    = "#efefef"
 
 var transparent     = "#00000000"
 
-var outgoing        = "#eeffdd"
+var outgoing        = "#3eb34f"
 var incoming        = "#ffffff"
-var time_out        = "#8bb778"
+var time_out        = "#6d7178"
 var time_in         = "#abaeb3"
 
 var chat_section    = "#99a6bcca"

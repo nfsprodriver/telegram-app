@@ -62,7 +62,7 @@ MainView {
     signal pushRegister(string token, string version)
     signal pushUnregister(string token)
     signal resumed()
-    
+
     onActiveFocusChanged: {
         if (activeFocus) {
             mainView.resumed()
@@ -82,6 +82,7 @@ MainView {
     }
 
     Component.onCompleted: {
+        //i18n.language = "sc";
         showIntro();
 
         if (profiles.count > 0 && Cutegram.hasArgs() > 0) {
@@ -232,6 +233,15 @@ MainView {
                 pushClient.clearPersistent([]);
             }
         }
+
+        onAuthPasswordNeeded: {
+            pageStack.setPrimaryPage();
+            pageStack.addPageToCurrentColumn(pageStack.primaryPage, authPasswordPage);
+        }
+
+        Component.onCompleted: {
+            account_list.codeRequested.connect(pageStack.pushAuthCodePage)
+        }
     }
 
     AdaptivePageLayout {
@@ -274,6 +284,27 @@ MainView {
             pageStack.removePages(pageStack.primaryPage);
         }
 
+        function pushAuthCodePage(authCodePage, telegram, phoneRegistered, sendCallTimeout, resent) {
+            console.log("Number of profiles: " + profiles.count);
+
+            if (profiles.count === 1) {
+                pageStack.setPrimaryPage();
+                pageStack.addPageToCurrentColumn(pageStack.primaryPage, authCodePage, {
+                    "phoneRegistered": telegram.authPhoneRegistered,
+                    "timeOut": sendCallTimeout
+                });
+            }
+
+            // Only add the authCodePage if the code has not been resent. If the code has
+            // been resent then authCodePage is already on the stack
+            else if (!resent){
+                pageStack.addPageToCurrentColumn(auth_number_page, authCodePage, {
+                    "phoneRegistered": telegram.authPhoneRegistered,
+                    "timeOut": sendCallTimeout
+                });
+            }
+        }
+
         IntroPage {
             id: introPage
             onStartMessaging: {
@@ -314,36 +345,10 @@ MainView {
 
                 Connections {
                     target: account_list
-                    onCodeRequested: {
-                        auth_number_page.isBusy = false;
-                        console.log("Number of profiles: " + profiles.count);
-
-                        if (profiles.count === 1) {
-                            pageStack.setPrimaryPage();
-                            pageStack.addPageToCurrentColumn(pageStack.primaryPage, authCodePage, {
-                                    "phoneRegistered": telegram.authPhoneRegistered,
-                                    "timeOut": sendCallTimeout
-                                });
-                        }
-
-                        // Only add the authCodePage if the code has not been resent. If the code has
-                        // been resent then authCodePage is already on the stack
-                        else if (!resent){
-                            pageStack.addPageToCurrentColumn(auth_number_page, authCodePage, {
-                                    "phoneRegistered": telegram.authPhoneRegistered,
-                                    "timeOut": sendCallTimeout
-                                });
-                        }
-
-//                        else {
-//                            authCodePage.timeOut = sendCallTimeout;
-//                            authCodePage.phoneRegistered = telegram.authPhoneRegistered
-//                        }
-                    }
+                    onCodeRequested: auth_number_page.isBusy = false
                 }
             }
         }
-
 
 //        Component {
 //            id: account_code_page_component

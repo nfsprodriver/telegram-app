@@ -38,7 +38,7 @@ ListItem {
     property string messageText: message.message
     property string messageHtmlText: parseText(message.message)
     property User user: telegramObject.user(message.fromId)
-    property User fwdUser: telegramObject.user(message.fwdFromId)
+    property User fwdUser: telegramObject.user(message.fwdFromId ? message.fwdFromId.userId : 0)
 
     property bool sent: message.sent
     property bool uploading: message.upload.fileId !== 0
@@ -82,14 +82,6 @@ ListItem {
     function htmlHasLinks(html) {
         return html.indexOf('<a href="') !== -1;
     }
-
-//    Connections {
-//        target: telegram.userData
-//        onLoadLinkChanged: {
-//            if (id !== user.id) return;
-//            allowLoadLinks = telegram.userData.isLoadLink(user.id);
-//        }
-//    }
 
     AccountMessageAction {
         id: action_item
@@ -154,39 +146,26 @@ ListItem {
             height: column.height + 2*textMargins
             anchors.verticalCenter: parent.verticalCenter
 
-            Item {
-                id: msg_frame_box
-                anchors.fill: parent
-                anchors.margins: -20*Devices.density
-                visible: !message_media.isSticker && !upload_item.isSticker
+            Rectangle {
+                id: msg_frame_shadow
+                width: msg_frame_box.width
+                height: msg_frame_box.height
+                radius: msg_frame_box.radius
 
-                Item {
-                    anchors.fill: parent
-                    anchors.margins: 20*Devices.density
-
-                    Rectangle {
-                        id: back_rect_layer
-                        anchors.fill: parent
-                        radius: 6*Devices.density
-                        color: {
-                            // if(message_media.mediaPlayer)
-                            //     return "white"
-                            // else
-                                return message.out ? Colors.outgoing : Colors.incoming
-                        }
-                    }
-                }
+                y: units.dp(1)
+                x: units.dp(1)
+                color: "#cdcdcd"    // theme.palette.normal.base (i.e. #CDCDCD) with opacity: 0.5
+                visible: msg_frame_box.visible
             }
 
-            DropShadow {
-                anchors.fill: source
-                source: msg_frame_box
-                radius: 6*Devices.density
-                samples: 16
-                horizontalOffset: 1*Devices.density
-                verticalOffset: 2*Devices.density
-                visible: !message_media.isSticker && !upload_item.isSticker
-                color: Qt.rgba(0,0,0,0.2)
+            Rectangle {
+                id: msg_frame_box
+                anchors.fill: parent
+                visible: (message_item.message != "" || forward_user_name.visible) && !message_media.isSticker
+                radius: 5.5*Devices.density
+                color: {
+                    return message.out ? Colors.outgoing : Colors.incoming
+                }
             }
 
             Column {
@@ -223,8 +202,8 @@ ListItem {
                     id: forward_user_name
                     fontSize: "smaller"
                     font.weight: Font.Normal
-                    color: message.out ? Colors.dark_green : Colors.blue
-                    visible: message.fwdFromId !== 0 && !message_media.isSticker
+                    color:  Colors.telegram_blue
+                    visible: message.fwdFromId !== 0 && message.fwdFromId.userId !== 0 && !message_media.isSticker
                     // TRANSLATORS: %1 indicates contact from whom the message was frowarded from.
                     text: visible ? i18n.tr("Forwarded from <b>%1</b>").arg(fwdUser.firstName + " " + fwdUser.lastName) : ""
                 }
@@ -279,12 +258,12 @@ ListItem {
                         width: Math.min(units.dp(htmlWidth), maximumWidth)
                         height: contentHeight
                         fontSize: message_item.hasMedia ? "small" : "medium"
-                        font.weight: Font.Normal
+                        font.weight: Font.Light
                         horizontalAlignment: Text.AlignLeft
                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                         textFormat: Text.RichText
-                        text: message_item.messageHtmlText // emojis.textToEmojiText(message_item.messageHtmlText)
-
+                        text: message_item.messageHtmlText
+                        color: message.out? "aliceblue" : "black"
                         onLinkActivated: {
                             if (link.slice(0,6) == "tag://") {
                                 console.log("tag links not supported yet");
